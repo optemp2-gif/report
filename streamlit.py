@@ -55,18 +55,52 @@ st.markdown("""
         max-width: 100% !important;
     }
     
+
     /* --- SIDEBAR --- */
     [data-testid="stSidebar"] {
         background-color: #12141C;
         border-right: 1px solid rgba(255, 255, 255, 0.05);
     }
+    
+    /* Remove Sidebar Top Padding */
+    [data-testid="stSidebar"] .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+    }
+
+    /* Sidebar Headings */
     [data-testid="stSidebar"] h3 {
         color: var(--text-primary);
         font-weight: 600;
-        font-size: 14px;
+        font-size: 13px !important; /* Slightly smaller header */
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        margin-top: 20px;
+        margin-top: 10px !important;
+    }
+    
+    /* Sidebar Text / Labels - Reduce Font Size */
+    [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stMarkdown p {
+        font-size: 12px !important;
+    }
+    
+    /* Filter Input Outline & Styling */
+    [data-testid="stSidebar"] div[data-baseweb="select"] > div, 
+    [data-testid="stSidebar"] input[type="text"],
+    [data-testid="stSidebar"] input[type="number"] {
+        background-color: rgba(255, 255, 255, 0.03) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 4px !important;
+        font-size: 12px !important;
+    }
+    
+    /* Date Input Specifics */
+    [data-testid="stSidebar"] input[aria-label="Date Range"] {
+        font-size: 12px !important;
+    }
+
+    /* Checkbox Size */
+    [data-testid="stSidebar"] label[data-baseweb="checkbox"] {
+        font-size: 12px !important;
     }
     
     /* --- CUSTOM CARDS --- */
@@ -205,8 +239,44 @@ st.markdown("""
     /* Older Streamlit versions might use .anchor-link */
     a.anchor-link { display: none !important; }
 
+    
+    /* --- PRINT STYLES --- */
+    @media print {
+        /* Hide Sidebar and non-essential UI */
+        [data-testid="stSidebar"], header, footer, .stDeployButton {
+            display: none !important;
+        }
+        /* Hide File Uploader / Expander */
+        [data-testid="stExpander"], .stButton, button {
+            display: none !important;
+        }
+        /* Expand Main Content */
+        .block-container {
+            max-width: 100% !important;
+            padding: 0 !important;
+        }
+        /* Force Background Colors */
+        * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        /* Custom Print Layout Tweaks */
+        body {
+            background-color: white !important; /* Optional: print white background? or keep dark? usually save as PDF keeps colors if setting enabled */
+        }
+        /* Ensure Graphs Resize */
+        .js-plotly-plot {
+            width: 100% !important;
+        }
+    }
+
     </style>
 """, unsafe_allow_html=True)
+
+# Small JS Injection for Printing
+def inject_print_js():
+    import streamlit.components.v1 as components
+    components.html("<script>window.parent.print();</script>", height=0, width=0)
 
 # --- DIALOGS ---
 
@@ -640,7 +710,13 @@ if not df_trades.empty:
         selected_type = st.multiselect("Type", ['Long', 'Short'], key="filter_type")
         selected_outcome = st.multiselect("Outcome", ['Win', 'Loss'], key="filter_outcome")
         st.write(""); st.write("")
-        st.button("Reset Filters", on_click=reset_filters)
+        
+        c_reset, c_print = st.columns(2)
+        with c_reset: st.button("Reset Filters", on_click=reset_filters, use_container_width=True)
+        with c_print:
+            if st.button("🖨️ Save PDF", use_container_width=True):
+                inject_print_js()
+
 
     if reverse_mode:
         df_filtered['GrossProfit'] = -df_filtered['GrossProfit']
@@ -879,54 +955,7 @@ if not df_filtered.empty:
                     fig_sym.update_traces(hovertemplate='Symbol: %{x}<br>PnL: $%{y:.2f}')
                     st.plotly_chart(fig_sym, use_container_width=True)
 
-            # Balance vs Drawdown Graph
-            with st.container(border=True):
-                # Heading Removed
-                
-                if not df_deps.empty and not combined_ops.empty:
-                    curve = combined_ops['Balance']
-                    times = combined_ops['time']
-                else:
-                    curve = df_filtered['Equity_Curve']
-                    times = df_filtered['time']
-                    
-                peak = curve.cummax()
-                drawdown = curve - peak
-                
-                fig_dd = go.Figure()
-                # Balance Line (Left Y)
-                fig_dd.add_trace(go.Scatter(
-                    x=times, y=curve, 
-                    name='Balance', 
-                    mode='lines',
-                    line=dict(color='#00D26A', width=2)
-                ))
-                # Drawdown Area (Right Y)
-                fig_dd.add_trace(go.Scatter(
-                    x=times, y=drawdown, 
-                    name='Drawdown', 
-                    fill='tozeroy', 
-                    mode='lines',
-                    line=dict(color='#F8312F', width=1), 
-                    yaxis='y2',
-                    fillcolor='rgba(248, 49, 47, 0.2)' 
-                ))
-                
-                fig_dd.update_layout(**common_layout)
-                fig_dd.update_layout(
-                    title="Balance vs Drawdown",
-                    xaxis_title="Date",
-                    yaxis=dict(title="Balance ($)", side="left", showgrid=True, zeroline=False),
-                    yaxis2=dict(
-                        title="Drawdown ($)", 
-                        side="right", 
-                        overlaying="y", 
-                        showgrid=False,
-                        zeroline=False
-                    ),
-                    legend=dict(orientation="h", y=1.1)
-                )
-                st.plotly_chart(fig_dd, use_container_width=True)
+
 
             # Historical Deposits (Moved to Bottom)
             if not st.session_state.get('df_deposits', pd.DataFrame()).empty:
